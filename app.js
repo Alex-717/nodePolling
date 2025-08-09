@@ -1,0 +1,139 @@
+const koa = require('koa')
+const app = new koa()
+const port = 3000
+const staticServer = require('koa-static')
+const path = require('path')
+const bodyParser = require('koa-bodyparser')
+const Router = require('koa-router')
+const { v4: uuidv4 } = require('uuid');
+
+const tasks = new Map() // 任务存储
+const taskStatus = {
+  PENDING: 'pending',
+  SUCCESS: 'success',
+  FAIL: 'fail'
+}
+const taskResultMap = {
+  'pending': 1,
+  'success': 2,
+  'fail': 3
+}
+
+app.use(bodyParser())
+// 重新配置静态文件服务器路径
+app.use(staticServer(path.resolve(__dirname, 'public')))
+
+const router = new Router()
+/**
+ * 处理任务提交的POST请求
+ */
+router.post('/api/task', async (ctx) => {
+  console.log(ctx.request.body)
+  const taskId = uuidv4()
+  
+  tasks.set(taskId, {
+    taskId,
+    status: taskStatus.PENDING,
+    createTime: Date.now()
+  })
+
+  callThirdPartyApi(taskId).catch(err => {
+    console.log('callThirdPartyApi err:', err)
+  })
+
+  // 返回响应，避免404错误
+  ctx.body = {
+    ret: 0,
+    msg: '任务提交成功',
+    data: {
+      taskId
+    }
+  }
+})
+
+router.get('/api/task/:taskId', async (ctx) => {
+  const taskId = ctx.params.taskId
+  console.log('获取任务', taskId)
+  if (!tasks.has(taskId)) {
+    ctx.body = {
+      ret: -1,
+      msg: '任务不存在',
+      data: {}
+    }
+    return
+  }
+  const task = tasks.get(taskId)
+
+  if (task.status === taskStatus.SUCCESS) {
+    ctx.body = {
+      ret: 0,
+      msg: '任务处理成功',
+      data: {
+        status: taskResultMap[task.status],
+        result: task.result
+      }
+    }
+  } else if (task.status === taskStatus.FAIL) {
+    ctx.body = {
+      ret: 0,
+      msg: '任务处理失败',
+      data: {
+        status: taskResultMap[task.status],
+        result: task.result
+      }
+    }
+  } else {
+    ctx.body = {
+      ret: 0,
+      msg: '任务处理中',
+      data: {
+        status: taskResultMap[task.status]
+      }
+    }
+  }
+  
+})
+
+app.use(router.routes())
+app.use(router.allowedMethods())
+app.listen(port, () => {
+  console.log(`服务器运行在 http://localhost:${port}`)
+})
+
+process.on('SIGINT', () => {
+  console.log('服务器关闭中...')
+  process.exit(0)
+}) 
+
+async function callThirdPartyApi(taskId) {
+  if (!tasks.has(taskId)) {
+    return Promise.reject(new Error('任务不存在'))
+  }
+
+  const timeout = 1000 * 6
+  await new Promise(resolve => setTimeout(resolve, timeout))
+
+  const task = tasks.get(taskId)
+  // 调用成功
+  if (Math.random() > 0.5) {
+    tasks.set(taskId, {
+      ...task,
+      status: taskStatus.SUCCESS,
+      successTime: Date.now(),
+      result: {
+        msg: '任务处理成功'
+      }
+    })
+    return
+  }
+
+  // 调用失败
+  tasks.set(taskId, {
+    ...task,
+    status: taskStatus.FAIL,
+    failTime: Date.now(),
+    result: {
+      msg: '任务处理失败'
+    }
+  })
+}

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>按钮页面</title>
+    <style>
+        .btn {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        .btn:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+  <div style="text-align: center;">
+      <button class="btn">点击我</button>
+  </div>
+  <div id="result" style="text-align: center;"></div>
+  <script>
+    const btn = document.querySelector('.btn')
+    btn.addEventListener('click', getTaskId)
+
+    function getTaskId () {
+      fetch('/api/task', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // body: JSON.stringify({
+        //   task: '点击了按钮',
+        // }),
+      })
+      .then(res => res.json())
+      .then(res => {
+        if (res.ret === 0) {
+          const taskId = res.data.taskId
+          pollTask(taskId)
+        }
+      })
+      .catch(err => {
+        console.log(err)
+      })
+    }
+
+    function pollTask (taskId) {
+      fetch(`/api/task/${taskId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      .then(res => res.json())
+      .then(res => {
+        if (res.ret === 0) {
+          const resultEl = document.getElementById('result')
+          if (res.data.status === 2) {
+            resultEl.innerHTML = '任务处理成功'
+          } else if (res.data.status === 3) {
+            resultEl.innerHTML = '任务处理失败'
+          } else {
+            resultEl.innerHTML = '任务处理中...'
+            setTimeout(() => {
+              // 轮训任务状态
+              pollTask(taskId)
+            }, 2000)
+          }
+        } else {
+          resultEl.innerHTML = '任务处理失败'
+        }
+      })
+      .catch(err => {
+        console.log(err)
+      })
+    }
+  </script>
+</body>
+</html>
