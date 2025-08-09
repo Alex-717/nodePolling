@@ -41,55 +41,32 @@ router.post('/api/task', async (ctx) => {
     console.log('callThirdPartyApi err:', err)
   })
 
-  // 返回响应，避免404错误
-  ctx.body = {
-    ret: 0,
-    msg: '任务提交成功',
-    data: {
-      taskId
-    }
-  }
+  ctx.body = getResponse(0, '任务提交成功', { taskId })
 })
 
 router.get('/api/task/:taskId', async (ctx) => {
   const taskId = ctx.params.taskId
   console.log('获取任务', taskId)
   if (!tasks.has(taskId)) {
-    ctx.body = {
-      ret: -1,
-      msg: '任务不存在',
-      data: {}
-    }
+    ctx.body = getResponse(-1, '任务不存在')
     return
   }
   const task = tasks.get(taskId)
 
   if (task.status === taskStatus.SUCCESS) {
-    ctx.body = {
-      ret: 0,
-      msg: '任务处理成功',
-      data: {
-        status: taskResultMap[task.status],
-        result: task.result
-      }
-    }
+    ctx.body = getResponse(0, '任务处理成功', {
+      status: taskResultMap[task.status],
+      result: task.result
+    })
   } else if (task.status === taskStatus.FAIL) {
-    ctx.body = {
-      ret: 0,
-      msg: '任务处理失败',
-      data: {
-        status: taskResultMap[task.status],
-        result: task.result
-      }
-    }
+    ctx.body = getResponse(0, '任务处理失败', {
+      status: taskResultMap[task.status],
+      result: task.result
+    })
   } else {
-    ctx.body = {
-      ret: 0,
-      msg: '任务处理中',
-      data: {
-        status: taskResultMap[task.status]
-      }
-    }
+    ctx.body = getResponse(0, '任务处理中', {
+      status: taskResultMap[task.status]
+    })
   }
   
 })
@@ -99,6 +76,52 @@ app.use(router.allowedMethods())
 app.listen(port, () => {
   console.log(`服务器运行在 http://localhost:${port}`)
 })
+
+process.on('SIGINT', () => {
+  console.log('服务器关闭中...')
+  process.exit(0)
+})
+
+function getResponse (ret, msg, data = {}) {
+  return {
+    ret,
+    msg,
+    data
+  }
+}
+
+async function callThirdPartyApi(taskId) {
+  if (!tasks.has(taskId)) {
+    return Promise.reject(new Error('任务不存在'))
+  }
+
+  const timeout = 6 * 1000
+  await new Promise(resolve => setTimeout(resolve, timeout))
+
+  const task = tasks.get(taskId)
+  // 调用成功
+  if (Math.random() > 0.5) {
+    tasks.set(taskId, {
+      ...task,
+      status: taskStatus.SUCCESS,
+      successTime: Date.now(),
+      result: {
+        msg: '任务处理成功'
+      }
+    })
+    return
+  }
+
+  // 调用失败
+  tasks.set(taskId, {
+    ...task,
+    status: taskStatus.FAIL,
+    failTime: Date.now(),
+    result: {
+      msg: '任务处理失败'
+    }
+  })
+}
 
 /**
  * 清理过期任务记录
@@ -133,41 +156,3 @@ function startCleanupTimer() {
 
 // 启动定时清理
 startCleanupTimer()
-
-process.on('SIGINT', () => {
-  console.log('服务器关闭中...')
-  process.exit(0)
-}) 
-
-async function callThirdPartyApi(taskId) {
-  if (!tasks.has(taskId)) {
-    return Promise.reject(new Error('任务不存在'))
-  }
-
-  const timeout = 6 * 1000
-  await new Promise(resolve => setTimeout(resolve, timeout))
-
-  const task = tasks.get(taskId)
-  // 调用成功
-  if (Math.random() > 0.5) {
-    tasks.set(taskId, {
-      ...task,
-      status: taskStatus.SUCCESS,
-      successTime: Date.now(),
-      result: {
-        msg: '任务处理成功'
-      }
-    })
-    return
-  }
-
-  // 调用失败
-  tasks.set(taskId, {
-    ...task,
-    status: taskStatus.FAIL,
-    failTime: Date.now(),
-    result: {
-      msg: '任务处理失败'
-    }
-  })
-}
